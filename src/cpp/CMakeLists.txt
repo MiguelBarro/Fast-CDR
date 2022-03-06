@@ -46,8 +46,15 @@ if(MSVC OR MSVC_IDE AND EPROSIMA_INSTALLER AND IS_TOP_LEVEL)
     generate_msvc_libraries(i86Win32VS2017)
     generate_msvc_libraries(x64Win64VS2017)
 elseif(NOT EPROSIMA_INSTALLER)
+
     # Create library
     add_library(${PROJECT_NAME} ${${PROJECT_NAME}_SOURCES})
+
+    # Enable Sanitizers if desired
+    if(Sanitizers_FOUND)
+        add_sanitize_thread(${PROJECT_NAME})
+    endif()
+
     set_common_compile_options(${PROJECT_NAME})
     set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${PROJECT_VERSION})
     set_target_properties(${PROJECT_NAME} PROPERTIES SOVERSION ${PROJECT_VERSION_MAJOR})

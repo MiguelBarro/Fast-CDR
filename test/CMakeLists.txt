@@ -20,6 +20,12 @@ include(${PROJECT_SOURCE_DIR}/cmake/common/gtest.cmake)
 ###############################################################################
 set(UNITTESTS_SOURCE SimpleTest.cpp ResizeTest.cpp)
 add_executable(UnitTests ${UNITTESTS_SOURCE})
+
+# Enable Sanitizers if desired
+if(Sanitizers_FOUND)
+    add_sanitize_thread(UnitTests)
+endif()
+
 set_common_compile_options(UnitTests)
 target_link_libraries(UnitTests fastcdr GTest::gtest_main)
 add_gtest(UnitTests SOURCES ${UNITTESTS_SOURCE})
