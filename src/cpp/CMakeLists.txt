@@ -52,7 +52,21 @@ elseif(NOT EPROSIMA_INSTALLER)
 
     # Enable Sanitizers if desired
     if(Sanitizers_FOUND)
-        add_sanitize_thread(${PROJECT_NAME})
+        if(SANITIZE_THREAD)
+            add_sanitize_thread(${PROJECT_NAME})
+        endif(SANITIZE_THREAD)
+
+        if(SANITIZE_ADDRESS)
+            add_sanitize_address(${PROJECT_NAME})
+        endif(SANITIZE_ADDRESS)
+
+        if(SANITIZE_MEMORY)
+            add_sanitize_memory(${PROJECT_NAME})
+        endif(SANITIZE_MEMORY)
+
+        if(SANITIZE_UNDEFINED)
+            add_sanitize_undefined(${PROJECT_NAME})
+        endif(SANITIZE_UNDEFINED)
     endif()
 
     set_common_compile_options(${PROJECT_NAME})
