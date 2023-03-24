@@ -16,50 +16,12 @@ jobs:
 
     steps:
 
-      - uses: actions/checkout@v2
-        with:
-          path: src/fastcdr
-
-      - name: Install python dependencies
+      - name: Check if gflags is available
         shell: pwsh
         run: |
-          cd $Env:TMP
-          $cr = "`n"
-          'cmake_minimum_required(VERSION 3.5)' + $cr  +
-          'project(dummy VERSION 1.0.0 LANGUAGES CXX)' + $cr +
-          'find_package(PythonInterp 3 REQUIRED)' + $cr +
-          'message(STATUS "cmake detected python=>>>>>${PYTHON_EXECUTABLE}<<<<<<")' | 
-          Out-File CMakeLists.txt 
-          (cmake .) *>&1 | % {
-              if($_ -Match "cmake detected python=>>>>>(?<exec>.*)<<<<<<")
-              {
-                 $python_exec = $Matches.exec
-                 echo "I managed to get here"
-                 return
-              }
-          }
-          echo "I managed to get here too"
-          $python_exec | Export-CliXML prueba.xml
-          echo "I managed to get even here"
-          & $python_exec -m pip install -U pytest pywin32
-          echo "I managed to finish"
+          ls -path C:\* -R -Filter gflags.exe -ErrorAction SilentlyContinue | select -First 4
 
-      - name: Check python install
-        shell: pwsh
-        run: | 
-          cd $Env:TMP; ls
-          cat CMakeLists.txt
-          Import-CliXML prueba.xml -OutVariable python_exec
-          echo $python_exec
-          & $python_exec -m pip list
-
-      - name: Build workspace
+      - name: Check if cdg is available
         shell: pwsh
         run: |
-          measure-command {
-          $installpath = "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise"
-          $modulepath = "$installpath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
-          Import-Module $modulepath
-          Enter-VsDevShell -SetDefaultWindowTitle -InstallPath $installpath `
-                           -DevCmdArguments '/arch=x64 /host_arch=x64' }
-
+          ls -path C:\* -R -Filter cdb.exe -ErrorAction SilentlyContinue | select -First 4
