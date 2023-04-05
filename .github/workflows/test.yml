@@ -8,20 +8,239 @@ on:
       - main
 
 jobs:
-  windows-build-test:
-    runs-on: windows-2019
-
-    env:
-      CXXFLAGS: /MP
+  mac-build-test:
+    runs-on: macos-12
 
     steps:
 
-      - name: Check if gflags is available
+      - name: Check if allocator_traits works
         shell: pwsh
         run: |
-          ls -path C:\* -R -Filter gflags.exe -ErrorAction SilentlyContinue | select -First 4
+          @"
+            #include <memory>
+            #include <iostream>
+            #include <type_traits>
 
-      - name: Check if cdg is available
-        shell: pwsh
-        run: |
-          ls -path C:\* -R -Filter cdb.exe -ErrorAction SilentlyContinue | select -First 4
+            using namespace std;
+
+            namespace detail {
+
+            // stateful: beware the factory must outlive its children
+            template<class T, class B, bool stateful>
+            class BuilderAllocator
+                : public std::allocator<T>
+            {
+                B& factory_;
+            public:
+
+                template <class Other>
+                struct rebind
+                {
+                    using other = typename std::conditional<
+                        std::is_same<Other, T>::value,
+                        BuilderAllocator,
+                        std::allocator<Other>>::type;
+                };
+
+                BuilderAllocator(B& factory)
+                    : factory_(factory)
+                {}
+
+                void on_allocation(
+                        T* p)
+                {
+                    // delegate into the reference
+                    factory_.on_allocation(p);
+                }
+
+                void on_deallocation(
+                        T* p)
+                {
+                    // delegate into the reference
+                    factory_.on_deallocation(p);
+                }
+            };
+
+            // stateless
+            template<class T, class B>
+            class BuilderAllocator<T,B,false>
+                : public std::allocator<T>
+            {
+            public:
+
+                template <class Other>
+                struct rebind
+                {
+                    using other = typename std::conditional<
+                        std::is_same<Other, T>::value,
+                        BuilderAllocator,
+                        std::allocator<Other>>::type;
+                };
+
+                void on_allocation(
+                        T* p)
+                {
+                    // delegate into static method
+                    B::on_allocation(p);
+                }
+
+                void on_deallocation(
+                        T* p)
+                {
+                    // delegate into static method
+                    B::on_deallocation(p);
+                }
+            };
+
+            } // namespace detail
+
+            // The allocator_traits must be specialized in the outer namespace (see N3730)
+            template<class T, class B, bool state>
+            struct std::allocator_traits<detail::BuilderAllocator<T, B, state>>
+            {
+                using BA = detail::BuilderAllocator<T, B, state>;
+
+                template <class Other>
+                using rebind_alloc = typename BA::template rebind<Other>::other;
+
+                template <class ... Types>
+                static const void construct(
+                        BA& alloc,
+                        T* const p,
+                        Types&&... args)
+                {
+                    std::allocator_traits<std::allocator<T>>::construct(
+                        alloc,
+                        p,
+                        std::forward<Types>(args)...);
+                    alloc.on_allocation(p);
+                }
+
+                static const void destroy(
+                        BA& alloc,
+                        T* p)
+                {
+                    alloc.on_deallocation(p);
+                    std::allocator_traits<std::allocator<T>>::destroy(alloc, p);
+                }
+
+            };
+
+            struct DynamicType {
+
+                DynamicType()
+                {
+                    cout << "type construction" << endl;
+                }
+
+                ~DynamicType()
+                {
+                    cout << "type destruction" << endl;
+                }
+            };
+
+            struct DynamicTypeBuilder {
+
+                using builder_allocator = detail::BuilderAllocator<DynamicType, DynamicTypeBuilder, false>;
+
+                DynamicTypeBuilder()
+                {
+                    cout << "builder construction" << endl;
+                }
+
+                ~DynamicTypeBuilder()
+                {
+                    cout << "builder destruction" << endl;
+                }
+
+                friend builder_allocator;
+
+                static void on_allocation(DynamicType* b)
+                {
+                    cout << "after type construction" << endl;
+                }
+
+                static void on_deallocation(
+                        DynamicType* b)
+                {
+                    cout << "before type destruction" << endl;
+                }
+
+            public:
+
+                shared_ptr<DynamicType> build()
+                {
+                    return std::allocate_shared<DynamicType>(builder_allocator{});
+                }
+            };
+
+            class DynamicTypeBuilderFactory
+            {
+                using builder_allocator = detail::BuilderAllocator<DynamicTypeBuilder, DynamicTypeBuilderFactory, true>;
+
+                // BuilderAllocator ancillary
+                builder_allocator& get_allocator()
+                {
+                    // stateful, this factory must outlive all builders
+                    static builder_allocator alloc{*this};
+                    return alloc;
+                }
+
+                friend builder_allocator;
+
+                void on_allocation(DynamicTypeBuilder* b)
+                {
+                    cout << "after builder construction" << endl;
+                }
+
+                void on_deallocation(
+                        DynamicTypeBuilder* b)
+                {
+                    cout << "before builder destruction" << endl;
+                }
+
+            public:
+
+                shared_ptr<DynamicTypeBuilder> create_type()
+                {
+                    return std::allocate_shared<DynamicTypeBuilder>(get_allocator());
+                }
+            };
+
+            int main()
+            {
+            #ifdef __GLIBCXX__
+                cout << "__GLIBCXX__ = " << __GLIBCXX__ << endl;
+            #endif
+
+            #ifdef __APPLE_CC__
+                cout << "__APPLE_CC__ = " << __APPLE_CC__ << endl;
+            #endif
+
+                // factory must outlive builders
+                DynamicTypeBuilderFactory factory;
+
+                shared_ptr<DynamicType> type;
+                {
+                    shared_ptr<DynamicTypeBuilder> builder = factory.create_type();
+                    type = builder->build();
+                }
+
+                return 0;
+            }
+          "@ | Out-File source.cpp
+
+          @"
+            cmake_minimum_required(VERSION 3.6)
+            project(dummy VERSION 1.0.0 LANGUAGES CXX)
+
+            add_executable(dummy source.cpp)
+
+            target_compile_features(dummy PUBLIC cxx_std_14)
+
+            install(TARGETS dummy RUNTIME DESTINATION `${CMAKE_CURRENT_LIST_DIR})
+          "@ | Out-File CMakeLists.txt
+
+          cmake -B build .
+          cmake --build build --target install
+          ./dummy
