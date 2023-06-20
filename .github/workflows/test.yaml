@@ -1,0 +1,395 @@
+name: test
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  mac-build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+
+      - name: Check if shared_ptr/weak_ptr specialization works
+        shell: pwsh
+        run: |
+          @"
+          #include <array>
+          #include <bitset>
+          #include <cassert>
+          #include <functional>
+          #include <iostream>
+          #include <memory>
+
+          namespace eprosima {
+
+          class DynamicType;
+          void (*dynamic_object_deleter(const DynamicType*))(const DynamicType*);
+
+          }
+
+          namespace std
+          {
+
+          template<>
+          class shared_ptr<const eprosima::DynamicType>
+              : public shared_ptr<const void>
+          {
+          public:
+
+              using element_type = const eprosima::DynamicType;
+              using base = shared_ptr<const void>;
+
+              constexpr shared_ptr() = default;
+
+              explicit shared_ptr(const element_type* pA)
+                  : base(pA, dynamic_object_deleter(pA)) {}
+
+              shared_ptr(const shared_ptr& r) noexcept
+                  : base(r) {}
+
+              shared_ptr(shared_ptr&& r) noexcept
+                  : base(move(r)) {}
+
+              template< class Y >
+              shared_ptr(const shared_ptr<Y>& r, element_type* ptr) noexcept
+                  : base(r, ptr) {}
+
+              template <class T, typename enable_if<is_convertible<T*, element_type*>::value, int>::type = 0>
+              explicit shared_ptr(const weak_ptr<T>& r)
+                  : base(r) {}
+
+              shared_ptr& operator=(const shared_ptr& r) noexcept
+              {
+                  return static_cast<shared_ptr&>(base::operator=(r));
+              }
+
+              shared_ptr& operator=(shared_ptr&& r) noexcept
+              {
+                  return static_cast<shared_ptr&>(base::operator=(move(r)));
+              }
+
+              void reset() noexcept
+              {
+                  base::reset();
+              }
+
+              void reset(element_type* pA)
+              {
+                  base::reset(pA, dynamic_object_deleter(pA));
+              }
+
+              element_type* get() const noexcept
+              {
+                  return static_cast<element_type*>(base::get());
+              }
+
+              element_type& operator*() const noexcept
+              {
+                  return *get();
+              }
+
+              element_type* operator->() const noexcept
+              {
+                  return get();
+              }
+          };
+
+          template<>
+          class shared_ptr<eprosima::DynamicType>
+              : public shared_ptr<const eprosima::DynamicType>
+          {
+          public:
+
+              using element_type = eprosima::DynamicType;
+              using base = shared_ptr<const eprosima::DynamicType>;
+
+              constexpr shared_ptr() = default;
+
+              shared_ptr(const shared_ptr& r) noexcept
+                  : base(r) {}
+
+              shared_ptr(shared_ptr&& r) noexcept
+                  : base(move(r)) {}
+
+              explicit shared_ptr(element_type* pA)
+                  : base(pA) {}
+
+              template< class Y >
+              shared_ptr(const shared_ptr<Y>& r, element_type* ptr) noexcept
+                  : base(r, ptr) {}
+
+              template <class T, typename enable_if<is_convertible<T*, element_type*>::value, int>::type = 0>
+              explicit shared_ptr(const weak_ptr<T>& r)
+                  : base(r) {}
+
+              shared_ptr& operator=(const shared_ptr& r) noexcept
+              {
+                  return static_cast<shared_ptr&>(base::operator=(r));
+              }
+
+              shared_ptr& operator=(shared_ptr&& r) noexcept
+              {
+                  return static_cast<shared_ptr&>(base::operator=(move(r)));
+              }
+
+              element_type* get() const noexcept
+              {
+                  return const_cast<element_type*>(base::get());
+              }
+
+              element_type& operator*() const noexcept
+              {
+                  return const_cast<element_type&>(*get());
+              }
+
+              element_type* operator->() const noexcept
+              {
+                  return get();
+              }
+          };
+
+          template<>
+          class weak_ptr<const eprosima::DynamicType>
+              : public weak_ptr<const void>
+          {
+          public:
+
+              using element_type = const eprosima::DynamicType;
+              using base = weak_ptr<const void>;
+
+              constexpr weak_ptr() noexcept = default;
+
+              weak_ptr(const weak_ptr& r) noexcept
+                  : base(r) {}
+
+              weak_ptr(weak_ptr&& r) noexcept
+                  : base(move(r)) {}
+
+              weak_ptr(const shared_ptr<element_type>& r) noexcept
+                  : base(r) {}
+
+              weak_ptr& operator=(const weak_ptr& r) noexcept
+              {
+                  base::operator=(r);
+                  return *this;
+              }
+
+              weak_ptr& operator=(weak_ptr&& r) noexcept
+              {
+                  base::operator=(move(r));
+                  return *this;
+              }
+
+              shared_ptr<element_type> lock() const noexcept
+              {
+                  return static_pointer_cast<element_type>(base::lock());
+              }
+          };
+
+          template<>
+          class weak_ptr<eprosima::DynamicType>
+              : public weak_ptr<const eprosima::DynamicType>
+          {
+          public:
+
+              using element_type = eprosima::DynamicType;
+              using base = weak_ptr<const eprosima::DynamicType>;
+
+              constexpr weak_ptr() noexcept = default;
+
+              weak_ptr(const weak_ptr& r) noexcept
+                  : base(r) {}
+
+              weak_ptr(weak_ptr&& r) noexcept
+                  : base(move(r)) {}
+
+              weak_ptr(const shared_ptr<element_type>& r) noexcept
+                  : base(r) {}
+
+              weak_ptr& operator=(const weak_ptr& r) noexcept
+              {
+                  base::operator=(r);
+                  return *this;
+              }
+
+              weak_ptr& operator=(weak_ptr&& r) noexcept
+              {
+                  base::operator=(move(r));
+                  return *this;
+              }
+
+              shared_ptr<element_type> lock() const noexcept
+              {
+                  return const_pointer_cast<element_type>(base::lock());
+              }
+          };
+
+          } // std
+
+          namespace utils {
+
+          template<class T>
+          class my_enable_shared
+              : public std::enable_shared_from_this<const void>
+          {
+              using base = std::enable_shared_from_this<const void>;
+
+          public:
+
+              std::shared_ptr<T> shared_from_this() {
+                  return std::static_pointer_cast<T>(std::const_pointer_cast<void>(base::shared_from_this()));
+              }
+
+              std::shared_ptr<const T> shared_from_this() const {
+                  return std::static_pointer_cast<const T>(base::shared_from_this());
+              }
+
+          #ifdef __cpp_lib_enable_shared_from_this
+
+              std::weak_ptr<T> weak_from_this() {
+                  auto wp = base::weak_from_this();
+                  return *static_cast<std::weak_ptr<T>*>(&wp);
+              }
+
+              std::weak_ptr<const T> weak_from_this() const {
+                  auto wp = base::weak_from_this();
+                  return *static_cast<std::weak_ptr<const T>*>(&wp);
+              }
+
+          #endif // __cpp_lib_enable_shared_from_this
+
+          };
+
+          } // namespace utils
+
+          namespace eprosima {
+
+          class DynamicType
+              : public utils::my_enable_shared<DynamicType>
+          {
+              static void deallocate(const DynamicType* p)
+              {
+                  if (p)
+                  {
+                      const size_t pos = p - buffer.data();
+                      assert( pos < N && bs[pos]);
+                      bs.reset(pos);
+                  }
+              }
+
+              static void external_deleter(const DynamicType* p);
+
+              friend void (*dynamic_object_deleter(const DynamicType*))(const DynamicType*);
+
+              public:
+
+              static DynamicType* allocate()
+              {
+                  if (bs.all())
+                      return nullptr;
+
+                  for(size_t i = 0; i < bs.size(); ++i)
+                  {
+                      if (!bs[i])
+                      {
+                          bs.set(i);
+                          return &buffer[i];
+                      }
+                  }
+
+                  assert(false);
+                  return nullptr;
+              }
+
+              static const size_t N = 10;
+
+              void hello()
+              {
+                  std::cout << "Hello World!" << std::endl;
+              }
+
+              void hello() const
+              {
+                  std::cout << "Hello const World!" << std::endl;
+              }
+
+              private:
+
+              static std::array<DynamicType, N> buffer;
+              static std::bitset<N> bs; // false means free
+          };
+
+          } // namespace eprosima
+
+          // main source
+
+          int main()
+          {
+              std::shared_ptr<eprosima::DynamicType> p1(eprosima::DynamicType::allocate());
+              p1->hello();
+              std::shared_ptr<eprosima::DynamicType> c1 = (*p1).shared_from_this();
+
+              std::weak_ptr<eprosima::DynamicType> wp1(p1);
+          #ifdef __cpp_lib_enable_shared_from_this
+              wp1 = (*p1).weak_from_this();
+          #endif
+              std::shared_ptr<eprosima::DynamicType> d1 = wp1.lock();
+              d1->hello();
+
+              std::shared_ptr<const eprosima::DynamicType> p2(eprosima::DynamicType::allocate());
+              p2->hello();
+              std::shared_ptr<const eprosima::DynamicType> c2 = (*p2).shared_from_this();
+
+              std::weak_ptr<const eprosima::DynamicType> wp2(p2);
+          #ifdef __cpp_lib_enable_shared_from_this
+              wp2 = (*p2).weak_from_this();
+          #endif
+              std::shared_ptr<const eprosima::DynamicType> d2 = wp2.lock();
+              d2->hello();
+
+              auto v = std::make_shared<eprosima::DynamicType>();
+
+              return 0;
+          }
+
+          // another source
+
+          using namespace eprosima;
+
+          std::array<DynamicType, DynamicType::N> DynamicType::buffer;
+          std::bitset<DynamicType::N> DynamicType::bs;
+
+          // this functions must be namespace resolved in order to avoid ambiguities
+          void DynamicType::external_deleter(const DynamicType* p)
+          {
+              DynamicType::deallocate(p);
+          };
+
+          void (*eprosima::dynamic_object_deleter(const DynamicType*))(const DynamicType*)
+          {
+              return DynamicType::external_deleter;
+          }
+          "@ | Out-File source.cpp
+
+          @"
+            cmake_minimum_required(VERSION 3.6)
+            project(dummy VERSION 1.0.0 LANGUAGES CXX)
+
+            add_executable(dummy source.cpp)
+
+            target_compile_features(dummy PUBLIC cxx_std_11)
+
+            install(TARGETS dummy RUNTIME DESTINATION `${CMAKE_CURRENT_LIST_DIR})
+          "@ | Out-File CMakeLists.txt
+
+          cmake -B build .
+          cmake --build build --target install
+          ./dummy
